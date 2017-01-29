@@ -1,0 +1,112 @@
+<html>
+<head>
+  <title>ayumi.js</title>
+  <script type="text/javascript" src="ayumi.js"></script>
+  <script type="text/javascript" src="pako_inflate.min.js"></script>
+  <script defer type="text/javascript">
+    var psgdump;
+    var frameCount;
+    var frameRate;
+    var ptr = 0;
+    var offset;
+    var frame = 0;
+    var loopFrame = 0;
+    var sampleRate = 44100;
+
+    var ayumi = new Ayumi;
+
+    var oReq = new XMLHttpRequest();
+    oReq.open('GET', 'nq_taimat.fym', true);
+    oReq.responseType = 'arraybuffer';
+    oReq.onload = function(e) {
+        var arrayBuffer = oReq.response;
+        if(arrayBuffer) {
+            fym = new Uint8Array(arrayBuffer);
+            psgdump = pako.inflate(fym);
+            start();
+        }
+    }
+    oReq.send();
+
+    updateState = function(renderer, r) {
+        renderer.setTone(0, (r[1] << 8) | r[0]);
+        renderer.setTone(1, (r[3] << 8) | r[2]);
+        renderer.setTone(2, (r[5] << 8) | r[4]);
+        renderer.setNoise(r[6]);
+        renderer.setMixer(0, r[7] & 1, (r[7] >> 3) & 1, r[8] >> 4);
+        renderer.setMixer(1, (r[7] >> 1) & 1, (r[7] >> 4) & 1, r[9] >> 4);
+        renderer.setMixer(2, (r[7] >> 2) & 1, (r[7] >> 5) & 1, r[10] >> 4);
+        renderer.setVolume(0, r[8] & 0xf);
+        renderer.setVolume(1, r[9] & 0xf);
+        renderer.setVolume(2, r[10] & 0xf);
+        renderer.setEnvelope((r[12] << 8) | r[11]);
+        if (r[13] != 255) {
+            renderer.setEnvelopeShape(r[13]);
+        }
+    }
+
+    getint = function() {
+        var r = 0;
+        for(var i=0; i<4; i++) r += psgdump[ptr++] << (8*i);
+        return r;
+    }
+
+    getstr = function() {
+        var r = '';
+        while(c = psgdump[ptr++]) r+=String.fromCharCode(c);
+        return r;
+    }
+
+    var isrCounter = 0;
+    fillBuffer = function(e) {
+        var isrStep = frameRate / sampleRate;
+        var left = e.outputBuffer.getChannelData(0);
+        var right = e.outputBuffer.getChannelData(1);
+        for(var i = 0; i < left.length; i++) {
+            isrCounter += isrStep;
+            if(isrCounter >= 1) {
+                isrCounter--;
+                var regs = [];
+                for(var r = 0; r < 14; r++) {
+                    regs[r] = psgdump[r*frameCount + frame + offset] || 0;
+                }
+                updateState(ayumi, regs);
+                if(++frame > frameCount) frame = loopFrame;
+            }
+            ayumi.process();
+            ayumi.removeDC();
+            left[i] = ayumi.left;
+            right[i] = ayumi.right;
+        }
+        return true;
+    }
+
+    start = function() {
+        offset = getint();
+        frameCount = getint();
+        loopFrame = getint();
+        var clockRate = getint();
+        frameRate = getint();
+        var trackName = getstr();
+        var authorName = getstr();
+
+        ayumi.configure(true, clockRate, sampleRate);
+        ayumi.setPan(0, 0.1, 0);
+        ayumi.setPan(1, 0.5, 0);
+        ayumi.setPan(2, 0.9, 0);
+
+        var AudioContext = window.AudioContext || window.webkitAudioContext;
+        var audioContext = new AudioContext();
+
+        var audioNode = audioContext.createScriptProcessor(4096, 0, 2);
+        audioNode.onaudioprocess = fillBuffer;
+        audioNode.connect(audioContext.destination);
+
+        console.log(offset, frameCount, loopFrame, clockRate, frameRate, trackName, authorName);
+    }
+  </script>
+</head>
+
+<body>
+</body>
+</html>
