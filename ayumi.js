@@ -57,7 +57,7 @@ Ayumi = function() {
   this.envelopeSegment = 0;
   this.envelope = 0;
 
-  this.dacTable = YM_dac_table;
+  this.dacTable = YM_DAC_TABLE;
 
   this.step = 0.0;
   this.x = 0.0;
