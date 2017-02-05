@@ -71,7 +71,7 @@
                     regs[r] = psgdump[r*frameCount + frame + offset] || 0;
                 }
                 updateState(ayumi, regs);
-                if(++frame > frameCount) frame = loopFrame;
+                if(++frame >= frameCount) frame = loopFrame;
             }
             ayumi.process();
             ayumi.removeDC();
